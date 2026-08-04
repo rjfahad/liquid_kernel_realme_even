@@ -110,6 +110,11 @@
 /*Chaochao.Liu@ODM_WT.NW.RF.swtp, 2020/12/29, Add for swtp, RF cable detect */
 	swtp:swtp {
 		compatible = "mediatek, swtp-eint";
+		interrupt-parent = <&pio>;
+		interrupts = <76 IRQ_TYPE_LEVEL_HIGH 76 0>;
+		deb-gpios = <&pio 76 0x0>;
+		debounce = <256000>;
+		status = "okay";
 	};
 //#endif /*OPLUS_BUG_COMPATIBILITY*/
         /* sensor start */
@@ -717,7 +722,7 @@
 
         qcom,normal_phase5_bat_decidegc = <380>;       /* 38C ~ 40C */
         qcom,temp_normal_phase5_vfloat_mv = <4435>;
-        qcom,temp_normal_phase5_fastchg_current_ma = <2200>;
+        qcom,temp_normal_phase5_fastchg_current_ma = <1700>;
 
         qcom,normal_phase6_bat_decidegc = <400>;       /* 40C ~ 45C */
         qcom,temp_normal_phase6_vfloat_mv = <4435>;
