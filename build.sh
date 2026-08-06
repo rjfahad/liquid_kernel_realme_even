@@ -33,6 +33,57 @@ JOBS="$(nproc)"
 OUT_DIR="$SCRIPT_DIR/out"
 KSU_REPO="https://github.com/tiann/KernelSU.git"
 KSU_NEXT_REPO="https://github.com/KernelSU-Next/KernelSU-Next.git"
+ZIP_PREFIX="Liquid-Even-RUI2"
+BUILD_VERSION_FILE="$SCRIPT_DIR/.kernel_zip_version"
+
+read_build_version() {
+    local version="1.0"
+
+    if [ -f "$BUILD_VERSION_FILE" ]; then
+        version="$(tr -d '[:space:]' < "$BUILD_VERSION_FILE" | head -n1)"
+    fi
+
+    if [[ "$version" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        echo "$version"
+    else
+        echo "1.0"
+    fi
+}
+
+save_build_version() {
+    printf '%s\n' "$1" > "$BUILD_VERSION_FILE"
+}
+
+zip_name_for_version() {
+    local root_sol="$1"
+    local version="$2"
+
+    case "$root_sol" in
+        ksunext) echo "${ZIP_PREFIX}-KSUNext-v${version}.zip" ;;
+        ksu)    echo "${ZIP_PREFIX}-KSU-v${version}.zip" ;;
+        sukisu) echo "${ZIP_PREFIX}-SukiSU-v${version}.zip" ;;
+        *)      echo "${ZIP_PREFIX}-v${version}.zip" ;;
+    esac
+}
+
+bump_build_version() {
+    local version="$1"
+    local major minor
+
+    major="${version%%.*}"
+    minor="${version#*.}"
+
+    if [ "$major" = "$version" ]; then
+        major="$version"
+        minor="0"
+    fi
+
+    if [[ "$major" =~ ^[0-9]+$ ]] && [[ "$minor" =~ ^[0-9]+$ ]]; then
+        echo "$major.$((minor + 1))"
+    else
+        echo "1.0"
+    fi
+}
 
 # ─── Detect root solution ───────────────────────────────────────────
 detect_root_solution() {
@@ -80,10 +131,13 @@ show_menu() {
     root_sol="$(detect_root_solution)"
     local compiler
     compiler="$(detect_compiler)"
+    local build_version
+    build_version="$(read_build_version)"
 
     header "Realme Even Kernel Builder"
     echo -e "  Compiler:   ${BOLD}${compiler}${NC}"
     echo -e "  Root:       ${BOLD}${root_sol}${NC}"
+    echo -e "  Zip Ver:    ${BOLD}v${build_version}${NC}"
     echo -e "  Branch:     ${BOLD}$(git branch --show-current 2>/dev/null || echo 'detached')${NC}"
     echo ""
     echo "  [1] Setup Workspace"
@@ -192,6 +246,8 @@ build_and_package() {
     root_sol="$(detect_root_solution)"
     local compiler
     compiler="$(detect_compiler)"
+    local build_version
+    build_version="$(read_build_version)"
 
     if [ "$compiler" = "system" ]; then
         error "No compiler found. Run Setup Workspace first."
@@ -201,20 +257,53 @@ build_and_package() {
     setup_path
 
     local zip_name
-    zip_name="Liquid-Even-RUI2-KSUNext.zip"
+    zip_name="$(zip_name_for_version "$root_sol" "$build_version")"
+    local output_path="$SCRIPT_DIR/$zip_name"
 
     info "Root solution: $root_sol"
     info "Compiler: Proton Clang 13.0.0"
     info "Output: $zip_name"
     echo ""
 
-    # Clean
-    info "Cleaning build artifacts..."
-    make O=out ARCH=$ARCH CC=clang HOSTCC=clang CROSS_COMPILE=aarch64-linux-gnu- mrproper 2>/dev/null
+    if [ -f "$output_path" ]; then
+        warn "Version v${build_version} already exists: $zip_name"
+        while true; do
+            read -rp "  [v] bump version  [o] overwrite  [c] cancel: " version_choice
+            case "$version_choice" in
+                v|V)
+                    while :; do
+                        build_version="$(bump_build_version "$build_version")"
+                        zip_name="$(zip_name_for_version "$root_sol" "$build_version")"
+                        output_path="$SCRIPT_DIR/$zip_name"
+                        if [ ! -f "$output_path" ]; then
+                            break
+                        fi
+                    done
+                    info "Using version v${build_version}"
+                    info "Output: $zip_name"
+                    break
+                    ;;
+                o|O)
+                    rm -f "$output_path"
+                    info "Overwriting existing zip"
+                    break
+                    ;;
+                c|C)
+                    return 0
+                    ;;
+                *)
+                    warn "Please choose v, o, or c."
+                    ;;
+            esac
+        done
+    fi
 
-    # Defconfig
-    info "Generating defconfig..."
-    make O=out ARCH=$ARCH CC=clang HOSTCC=clang CROSS_COMPILE=aarch64-linux-gnu- "$DEFCONFIG"
+    if [ ! -f "$OUT_DIR/.config" ]; then
+        info "Generating defconfig..."
+        make O=out ARCH=$ARCH CC=clang HOSTCC=clang CROSS_COMPILE=aarch64-linux-gnu- "$DEFCONFIG"
+    else
+        info "Using existing out/.config for incremental build"
+    fi
 
     # Build
     info "Building kernel with $JOBS jobs..."
@@ -238,6 +327,7 @@ build_and_package() {
 
     # Package with AnyKernel3
     package_zip "$zip_name"
+    save_build_version "$build_version"
 }
 
 package_zip() {
@@ -293,8 +383,10 @@ push_to_device() {
 
     local root_sol
     root_sol="$(detect_root_solution)"
+    local build_version
+    build_version="$(read_build_version)"
     local zip_name
-    zip_name="Liquid-Even-RUI2-KSUNext.zip"
+    zip_name="$(zip_name_for_version "$root_sol" "$build_version")"
 
     local zip_path="$SCRIPT_DIR/$zip_name"
     if [ ! -f "$zip_path" ]; then
@@ -315,7 +407,10 @@ clean_all() {
     rm -rf "$OUT_DIR"
 
     info "Removing *.zip..."
-    rm -f "$SCRIPT_DIR"/Liquid-Even-RUI2*.zip
+    rm -f "$SCRIPT_DIR"/${ZIP_PREFIX}*.zip
+
+    info "Removing build version file..."
+    rm -f "$BUILD_VERSION_FILE"
 
     info "Removing anykernel3/Image.gz-dtb..."
     rm -f "$ANYKERNEL_DIR/Image.gz-dtb" 2>/dev/null
