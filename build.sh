@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # build.sh — Kernel Builder for Realme Even (MT6768)
-# Supports: KernelSU v0.9.5, KernelSU-Next, and ReSukiSU
+# Supports: KernelSU-Next (legacy)
 #
 
 set -euo pipefail
@@ -33,12 +33,11 @@ JOBS="$(nproc)"
 OUT_DIR="$SCRIPT_DIR/out"
 KSU_REPO="https://github.com/tiann/KernelSU.git"
 KSU_NEXT_REPO="https://github.com/KernelSU-Next/KernelSU-Next.git"
-SUKISU_REPO="https://github.com/SukiSU-Ultra/SukiSU-Ultra.git"
 
 # ─── Detect root solution ───────────────────────────────────────────
 detect_root_solution() {
-    local remote
     if [ -d "$SCRIPT_DIR/KernelSU-Next" ]; then
+        local remote
         remote="$(git -C "$SCRIPT_DIR/KernelSU-Next" remote get-url origin 2>/dev/null || true)"
         if echo "$remote" | grep -qi "KernelSU-Next"; then
             echo "ksunext"
@@ -46,37 +45,12 @@ detect_root_solution() {
         fi
     fi
 
-    if [ -d "$SCRIPT_DIR/KernelSU" ]; then
-        remote="$(git -C "$SCRIPT_DIR/KernelSU" remote get-url origin 2>/dev/null || true)"
-        if echo "$remote" | grep -qi "SukiSU-Ultra"; then
-            echo "sukisu"
-            return
-        elif echo "$remote" | grep -qi "tiann/KernelSU"; then
-            echo "ksu"
-            return
-        fi
-    fi
-
-    if [ -d "$SCRIPT_DIR/ReSukiSU" ]; then
-        remote="$(git -C "$SCRIPT_DIR/ReSukiSU" remote get-url origin 2>/dev/null || true)"
-        if echo "$remote" | grep -qi "ReSukiSU"; then
-            echo "resukisu"
-            return
-        fi
-    fi
-
-    if [ ! -d "$SCRIPT_DIR/KernelSU" ] && [ ! -d "$SCRIPT_DIR/KernelSU-Next" ] && [ ! -d "$SCRIPT_DIR/ReSukiSU" ]; then
+    if [ ! -d "$SCRIPT_DIR/KernelSU-Next" ]; then
         echo "none"
         return
     fi
 
-    if echo "$remote" | grep -qi "SukiSU-Ultra"; then
-        echo "sukisu"
-    elif echo "$remote" | grep -qi "tiann/KernelSU"; then
-        echo "ksu"
-    else
-        echo "unknown"
-    fi
+    echo "unknown"
 }
 
 # ─── Detect compiler ─────────────────────────────────────────────────
@@ -113,7 +87,7 @@ show_menu() {
     echo -e "  Branch:     ${BOLD}$(git branch --show-current 2>/dev/null || echo 'detached')${NC}"
     echo ""
     echo "  [1] Setup Workspace"
-    echo "  [2] Install Root Solution"
+    echo "  [2] Install KernelSU-Next"
     echo "  [3] Build & Package"
     echo "  [4] Push to Device"
     echo "  [5] Clean"
@@ -161,64 +135,6 @@ setup_workspace() {
     info "Workspace setup complete"
 }
 
-# ─── 2. Install Root Solution ───────────────────────────────────────
-install_root() {
-    header "Install Root Solution"
-
-    local current
-    current="$(detect_root_solution)"
-
-    echo "  Current: ${BOLD}${current}${NC}"
-    echo ""
-    echo "  [a] KernelSU v0.9.5 (recommended for 4.14)"
-    echo "  [b] KernelSU-Next (legacy)"
-    echo "  [c] SukiSU-Ultra latest (⚠️  4.14 compat issues)"
-    echo "  [d] Remove root (none)"
-    echo "  [0] Back"
-    echo ""
-    read -rp "  > " choice
-
-    case "$choice" in
-        a|A)
-            install_kernelsu
-            ;;
-        b|B)
-            install_ksunext
-            ;;
-        c|C)
-            install_sukisu
-            ;;
-        d|D)
-            remove_root
-            ;;
-        0)
-            return
-            ;;
-        *)
-            error "Invalid choice"
-            ;;
-    esac
-}
-
-install_kernelsu() {
-    info "Installing KernelSU v0.9.5..."
-
-    # Remove existing if present
-    if [ -d "$SCRIPT_DIR/KernelSU" ]; then
-        rm -rf "$SCRIPT_DIR/KernelSU"
-    fi
-
-    # Clone KernelSU
-    git clone --depth=1 -b v0.9.5 "$KSU_REPO" "$SCRIPT_DIR/KernelSU"
-
-    # Run setup
-    cd "$SCRIPT_DIR"
-    bash KernelSU/kernel/setup.sh v0.9.5
-
-    info "KernelSU v0.9.5 installed"
-    info "Make sure CONFIG_KSU=y is in defconfig"
-}
-
 install_ksunext() {
     info "Installing KernelSU-Next (legacy)..."
 
@@ -256,80 +172,8 @@ apply_ksunext_compat_fixes() {
     info "KernelSU-Next compat fixes applied"
 }
 
-install_sukisu() {
-    warn "SukiSU-Ultra has known 4.14 compatibility issues:"
-    warn "  - Missing syscall_fn_t for ARM64"
-    warn "  - Missing strncpy_from_user_nofault"
-    warn "  - Missing linux/pgtable.h"
-    echo ""
-    read -rp "  Continue anyway? [y/N] " confirm
-    if [[ ! "$confirm" =~ ^[yY]$ ]]; then
-        return
-    fi
-
-    info "Installing SukiSU-Ultra..."
-
-    # Remove existing if present
-    if [ -d "$SCRIPT_DIR/KernelSU" ]; then
-        rm -rf "$SCRIPT_DIR/KernelSU"
-    fi
-
-    # Clone SukiSU-Ultra
-    git clone --depth=1 "$SUKISU_REPO" "$SCRIPT_DIR/KernelSU"
-
-    # Run setup
-    cd "$SCRIPT_DIR"
-    bash KernelSU/kernel/setup.sh main
-
-    # Apply 4.14 compat fixes
-    apply_sukisu_compat_fixes
-
-    info "SukiSU-Ultra installed (with 4.14 compat patches)"
-    info "Make sure CONFIG_KSU=y is in defconfig"
-}
-
-apply_sukisu_compat_fixes() {
-    info "Applying 4.14 compatibility patches..."
-
-    local HOOK_DIR="$SCRIPT_DIR/drivers/kernelsu/hook"
-    local FEAT_DIR="$SCRIPT_DIR/drivers/kernelsu/feature"
-    local INIT_C="$SCRIPT_DIR/drivers/kernelsu/core/init.c"
-
-    # Fix syscall_hook.h — add ARM64 typedef
-    if [ -f "$HOOK_DIR/syscall_hook.h" ]; then
-        if ! grep -q "defined(__aarch64__)" "$HOOK_DIR/syscall_hook.h"; then
-            sed -i '/#if defined(__x86_64__)/a\#elif defined(__aarch64__)\ntypedef void *syscall_fn_t;' \
-                "$HOOK_DIR/syscall_hook.h"
-            info "Patched syscall_hook.h for ARM64"
-        fi
-    fi
-
-    # Fix sucompat.c — pgtable.h → asm/pgtable.h
-    if [ -f "$FEAT_DIR/sucompat.c" ]; then
-        sed -i 's|#include <linux/pgtable.h>|#include <asm/pgtable.h>|' "$FEAT_DIR/sucompat.c"
-        info "Patched sucompat.c pgtable include"
-    fi
-
-    # Fix init.c — MODULE_IMPORT_NS for 4.14
-    if [ -f "$INIT_C" ]; then
-        if grep -q "MODULE_IMPORT_NS" "$INIT_C" && ! grep -q "KERNEL_VERSION(5, 10" "$INIT_C"; then
-            sed -i '/MODULE_IMPORT_NS(VFS_internal/a\#endif' "$INIT_C"
-            sed -i '/MODULE_IMPORT_NS(VFS_internal/i\#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)' "$INIT_C"
-            info "Patched init.c MODULE_IMPORT_NS"
-        fi
-    fi
-
-    info "Compat patches applied"
-}
-
 remove_root() {
     info "Removing root solution..."
-
-    if [ -d "$SCRIPT_DIR/KernelSU" ]; then
-        cd "$SCRIPT_DIR"
-        bash KernelSU/kernel/setup.sh --cleanup 2>/dev/null || true
-        rm -rf "$SCRIPT_DIR/KernelSU"
-    fi
 
     if [ -d "$SCRIPT_DIR/KernelSU-Next" ]; then
         cd "$SCRIPT_DIR"
@@ -357,13 +201,7 @@ build_and_package() {
     setup_path
 
     local zip_name
-    case "$root_sol" in
-        ksu)    zip_name="Liquid-Even-RUI2-KSU.zip" ;;
-        ksunext) zip_name="Liquid-Even-RUI2-KSUNext.zip" ;;
-        sukisu) zip_name="Liquid-Even-RUI2-SukiSU.zip" ;;
-        resukisu) zip_name="Liquid-Even-RUI2-ReSukiSU.zip" ;;
-        *)      zip_name="Liquid-Even-RUI2.zip" ;;
-    esac
+    zip_name="Liquid-Even-RUI2-KSUNext.zip"
 
     info "Root solution: $root_sol"
     info "Compiler: Proton Clang 13.0.0"
@@ -423,14 +261,7 @@ package_zip() {
     # Update anykernel.sh kernel.string
     local root_sol
     root_sol="$(detect_root_solution)"
-    local kernel_str
-    case "$root_sol" in
-        ksu)    kernel_str="Liquid Kernel Even (KSU) by rjfahad" ;;
-        ksunext) kernel_str="Liquid Kernel Even (KSUNext) by rjfahad" ;;
-        sukisu) kernel_str="Liquid Kernel Even (SukiSU) by rjfahad" ;;
-        resukisu) kernel_str="Liquid Kernel Even (ReSukiSU) by rjfahad" ;;
-        *)      kernel_str="Liquid Kernel Even by rjfahad" ;;
-    esac
+    local kernel_str="Liquid Kernel Even (KSUNext) by rjfahad"
 
     sed -i "s/^kernel.string=.*/kernel.string=$kernel_str/" "$ANYKERNEL_DIR/anykernel.sh"
 
@@ -463,13 +294,7 @@ push_to_device() {
     local root_sol
     root_sol="$(detect_root_solution)"
     local zip_name
-    case "$root_sol" in
-        ksu)    zip_name="Liquid-Even-RUI2-KSU.zip" ;;
-        ksunext) zip_name="Liquid-Even-RUI2-KSUNext.zip" ;;
-        sukisu) zip_name="Liquid-Even-RUI2-SukiSU.zip" ;;
-        resukisu) zip_name="Liquid-Even-RUI2-ReSukiSU.zip" ;;
-        *)      zip_name="Liquid-Even-RUI2.zip" ;;
-    esac
+    zip_name="Liquid-Even-RUI2-KSUNext.zip"
 
     local zip_path="$SCRIPT_DIR/$zip_name"
     if [ ! -f "$zip_path" ]; then
@@ -505,7 +330,7 @@ main() {
         read -rp "  > " choice
         case "$choice" in
             1) setup_workspace ;;
-            2) install_root ;;
+            2) install_ksunext ;;
             3) build_and_package ;;
             4) push_to_device ;;
             5) clean_all ;;
