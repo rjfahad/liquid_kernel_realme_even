@@ -35,6 +35,7 @@ KSU_REPO="https://github.com/tiann/KernelSU.git"
 KSU_NEXT_REPO="https://github.com/KernelSU-Next/KernelSU-Next.git"
 ZIP_PREFIX="Liquid-Even-RUI2"
 BUILD_VERSION_FILE="$SCRIPT_DIR/.kernel_zip_version"
+BUILD_STATE_FILE="$OUT_DIR/.build_state"
 
 read_build_version() {
     local version="1.0"
@@ -83,6 +84,27 @@ bump_build_version() {
     else
         echo "1.0"
     fi
+}
+
+read_build_state() {
+    local key="$1"
+
+    if [ ! -f "$BUILD_STATE_FILE" ]; then
+        return 0
+    fi
+
+    sed -n "s/^${key}=//p" "$BUILD_STATE_FILE" | head -n1
+}
+
+save_build_state() {
+    local branch_name="$1"
+    local root_sol="$2"
+
+    mkdir -p "$OUT_DIR"
+    {
+        printf 'branch=%s\n' "$branch_name"
+        printf 'root=%s\n' "$root_sol"
+    } > "$BUILD_STATE_FILE"
 }
 
 # ─── Detect root solution ───────────────────────────────────────────
@@ -248,6 +270,12 @@ build_and_package() {
     compiler="$(detect_compiler)"
     local build_version
     build_version="$(read_build_version)"
+    local current_branch
+    current_branch="$(git branch --show-current 2>/dev/null || echo detached)"
+    local previous_branch
+    previous_branch="$(read_build_state branch)"
+    local previous_root
+    previous_root="$(read_build_state root)"
 
     if [ "$compiler" = "system" ]; then
         error "No compiler found. Run Setup Workspace first."
@@ -264,6 +292,15 @@ build_and_package() {
     info "Compiler: Proton Clang 13.0.0"
     info "Output: $zip_name"
     echo ""
+
+    if [ -d "$OUT_DIR" ] && {
+        [ -n "$previous_branch" ] && [ "$previous_branch" != "$current_branch" ];
+    } || {
+        [ -n "$previous_root" ] && [ "$previous_root" != "$root_sol" ];
+    }; then
+        warn "Branch or root changed since last build. Cleaning out/ for a safe rebuild."
+        rm -rf "$OUT_DIR"
+    fi
 
     if [ -f "$output_path" ]; then
         warn "Version v${build_version} already exists: $zip_name"
@@ -328,6 +365,7 @@ build_and_package() {
     # Package with AnyKernel3
     package_zip "$zip_name"
     save_build_version "$build_version"
+    save_build_state "$current_branch" "$root_sol"
 }
 
 package_zip() {
@@ -411,6 +449,9 @@ clean_all() {
 
     info "Removing build version file..."
     rm -f "$BUILD_VERSION_FILE"
+
+    info "Removing build state file..."
+    rm -f "$BUILD_STATE_FILE"
 
     info "Removing anykernel3/Image.gz-dtb..."
     rm -f "$ANYKERNEL_DIR/Image.gz-dtb" 2>/dev/null
