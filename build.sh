@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # build.sh — Kernel Builder for Realme Even (MT6768)
-# Supports: KernelSU v0.9.5 and SukiSU-Ultra
+# Supports: KernelSU v0.9.5 and ReSukiSU
 #
 
 set -euo pipefail
@@ -32,19 +32,27 @@ ARCH="arm64"
 JOBS="$(nproc)"
 OUT_DIR="$SCRIPT_DIR/out"
 KSU_REPO="https://github.com/tiann/KernelSU.git"
-SUKISU_REPO="https://github.com/SukiSU-Ultra/SukiSU-Ultra.git"
+RESUKISU_DIR="$SCRIPT_DIR/ReSukiSU"
+RESUKISU_REPO="https://github.com/ReSukiSU/ReSukiSU.git"
 
 # ─── Detect root solution ───────────────────────────────────────────
 detect_root_solution() {
+    local remote
+    if [ -d "$RESUKISU_DIR" ]; then
+        remote="$(git -C "$RESUKISU_DIR" remote get-url origin 2>/dev/null || true)"
+        if echo "$remote" | grep -qi "ReSukiSU"; then
+            echo "resukisu"
+            return
+        fi
+    fi
+
     if [ ! -d "$SCRIPT_DIR/KernelSU" ]; then
         echo "none"
         return
     fi
-    local remote
+
     remote="$(git -C "$SCRIPT_DIR/KernelSU" remote get-url origin 2>/dev/null || true)"
-    if echo "$remote" | grep -qi "SukiSU-Ultra"; then
-        echo "sukisu"
-    elif echo "$remote" | grep -qi "tiann/KernelSU"; then
+    if echo "$remote" | grep -qi "tiann/KernelSU"; then
         echo "ksu"
     else
         echo "unknown"
@@ -143,7 +151,7 @@ install_root() {
     echo "  Current: ${BOLD}${current}${NC}"
     echo ""
     echo "  [a] KernelSU v0.9.5 (recommended for 4.14)"
-    echo "  [b] SukiSU-Ultra latest (⚠️  4.14 compat issues)"
+    echo "  [b] ReSukiSU latest"
     echo "  [c] Remove root (none)"
     echo "  [0] Back"
     echo ""
@@ -154,7 +162,7 @@ install_root() {
             install_kernelsu
             ;;
         b|B)
-            install_sukisu
+            install_resukisu
             ;;
         c|C)
             remove_root
@@ -187,8 +195,8 @@ install_kernelsu() {
     info "Make sure CONFIG_KSU=y is in defconfig"
 }
 
-install_sukisu() {
-    warn "SukiSU-Ultra has known 4.14 compatibility issues:"
+install_resukisu() {
+    warn "ReSukiSU has known 4.14 compatibility issues:"
     warn "  - Missing syscall_fn_t for ARM64"
     warn "  - Missing strncpy_from_user_nofault"
     warn "  - Missing linux/pgtable.h"
@@ -198,28 +206,28 @@ install_sukisu() {
         return
     fi
 
-    info "Installing SukiSU-Ultra..."
+    info "Installing ReSukiSU..."
 
     # Remove existing if present
-    if [ -d "$SCRIPT_DIR/KernelSU" ]; then
-        rm -rf "$SCRIPT_DIR/KernelSU"
+    if [ -d "$RESUKISU_DIR" ]; then
+        rm -rf "$RESUKISU_DIR"
     fi
 
-    # Clone SukiSU-Ultra
-    git clone --depth=1 "$SUKISU_REPO" "$SCRIPT_DIR/KernelSU"
+    # Clone ReSukiSU
+    git clone --depth=1 "$RESUKISU_REPO" "$RESUKISU_DIR"
 
     # Run setup
     cd "$SCRIPT_DIR"
-    bash KernelSU/kernel/setup.sh main
+    bash ReSukiSU/kernel/setup.sh main
 
     # Apply 4.14 compat fixes
-    apply_sukisu_compat_fixes
+    apply_resukisu_compat_fixes
 
-    info "SukiSU-Ultra installed (with 4.14 compat patches)"
+    info "ReSukiSU installed (with 4.14 compat patches)"
     info "Make sure CONFIG_KSU=y is in defconfig"
 }
 
-apply_sukisu_compat_fixes() {
+apply_resukisu_compat_fixes() {
     info "Applying 4.14 compatibility patches..."
 
     local HOOK_DIR="$SCRIPT_DIR/drivers/kernelsu/hook"
@@ -256,10 +264,10 @@ apply_sukisu_compat_fixes() {
 remove_root() {
     info "Removing root solution..."
 
-    if [ -d "$SCRIPT_DIR/KernelSU" ]; then
+    if [ -d "$RESUKISU_DIR" ]; then
         cd "$SCRIPT_DIR"
-        bash KernelSU/kernel/setup.sh --cleanup 2>/dev/null || true
-        rm -rf "$SCRIPT_DIR/KernelSU"
+        bash ReSukiSU/kernel/setup.sh --cleanup 2>/dev/null || true
+        rm -rf "$RESUKISU_DIR"
     fi
 
     info "Root solution removed"
@@ -284,7 +292,7 @@ build_and_package() {
     local zip_name
     case "$root_sol" in
         ksu)    zip_name="Liquid-Even-RUI2-KSU.zip" ;;
-        sukisu) zip_name="Liquid-Even-RUI2-SukiSU.zip" ;;
+        resukisu) zip_name="Liquid-Even-RUI2-ReSukiSU.zip" ;;
         *)      zip_name="Liquid-Even-RUI2.zip" ;;
     esac
 
@@ -349,7 +357,7 @@ package_zip() {
     local kernel_str
     case "$root_sol" in
         ksu)    kernel_str="Liquid Kernel Even (KSU) by rjfahad" ;;
-        sukisu) kernel_str="Liquid Kernel Even (SukiSU) by rjfahad" ;;
+        resukisu) kernel_str="Liquid Kernel Even (ReSukiSU) by rjfahad" ;;
         *)      kernel_str="Liquid Kernel Even by rjfahad" ;;
     esac
 
@@ -386,7 +394,7 @@ push_to_device() {
     local zip_name
     case "$root_sol" in
         ksu)    zip_name="Liquid-Even-RUI2-KSU.zip" ;;
-        sukisu) zip_name="Liquid-Even-RUI2-SukiSU.zip" ;;
+        resukisu) zip_name="Liquid-Even-RUI2-ReSukiSU.zip" ;;
         *)      zip_name="Liquid-Even-RUI2.zip" ;;
     esac
 
