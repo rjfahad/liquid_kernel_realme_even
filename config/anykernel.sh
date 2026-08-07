@@ -38,6 +38,16 @@ PATCH_VBMETA_FLAG=auto;
 # import functions/variables and setup patching - see for reference (DO NOT REMOVE)
 . tools/ak3-core.sh;
 
+ui_print " "
+ui_print "     █████╗ ██████╗ ██╗███████╗███████╗"
+ui_print "    ██╔══██╗██╔══██╗██║██╔════╝██╔════╝"
+ui_print "    ███████║██████╔╝██║███████╗█████╗  "
+ui_print "    ██╔══██║██╔══██╗██║╚════██║██╔══╝  "
+ui_print "    ██║  ██║██║  ██║██║███████║███████╗"
+ui_print "    ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝"
+ui_print " "
+ui_print "          ARISE Kernel - Even (MT6768)"
+ui_print " "
 # boot install
 dump_boot; # use split_boot to skip ramdisk unpack, e.g. for devices with init_boot ramdisk
 
