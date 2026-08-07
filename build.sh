@@ -27,6 +27,7 @@ PROTON_DIR="$SCRIPT_DIR/prebuilts-clang-proton"
 PROTON_REPO="https://github.com/kdrag0n/proton-clang.git"
 ANYKERNEL_DIR="$SCRIPT_DIR/anykernel3"
 ANYKERNEL_REPO="https://github.com/osm0sis/AnyKernel3.git"
+ANYKERNEL_CONFIG="$SCRIPT_DIR/config/anykernel.sh"
 DEFCONFIG="even_defconfig"
 ARCH="arm64"
 JOBS="$(nproc)"
@@ -135,6 +136,21 @@ detect_compiler() {
     fi
 }
 
+# ─── AnyKernel3 ──────────────────────────────────────────────────────
+setup_anykernel() {
+    if [ ! -d "$ANYKERNEL_DIR" ]; then
+        info "Cloning AnyKernel3..."
+        git clone --depth=1 "$ANYKERNEL_REPO" "$ANYKERNEL_DIR"
+    fi
+
+    if [ -f "$ANYKERNEL_CONFIG" ]; then
+        cp "$ANYKERNEL_CONFIG" "$ANYKERNEL_DIR/anykernel.sh"
+        info "Applied device anykernel.sh template (RMX3195)"
+    else
+        warn "anykernel.sh template not found at $ANYKERNEL_CONFIG"
+    fi
+}
+
 # ─── Setup PATH ──────────────────────────────────────────────────────
 setup_path() {
     if [ "$(detect_compiler)" = "proton" ]; then
@@ -190,13 +206,8 @@ setup_workspace() {
     fi
 
     # AnyKernel3
-    if [ -d "$ANYKERNEL_DIR" ]; then
-        info "AnyKernel3 already exists at $ANYKERNEL_DIR"
-    else
-        info "Cloning AnyKernel3..."
-        git clone --depth=1 "$ANYKERNEL_REPO" "$ANYKERNEL_DIR"
-        info "AnyKernel3 installed"
-    fi
+    setup_anykernel
+    info "AnyKernel3 ready at $ANYKERNEL_DIR"
 
     # Verify toolchain
     setup_path
@@ -374,10 +385,7 @@ package_zip() {
         return 1
     fi
 
-    if [ ! -d "$ANYKERNEL_DIR" ]; then
-        warn "AnyKernel3 not found. Cloning..."
-        git clone --depth=1 "$ANYKERNEL_REPO" "$ANYKERNEL_DIR"
-    fi
+    setup_anykernel
 
     # Copy kernel
     cp "$OUT_DIR/arch/arm64/boot/Image.gz-dtb" "$ANYKERNEL_DIR/Image.gz-dtb"
