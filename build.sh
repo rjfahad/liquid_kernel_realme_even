@@ -335,12 +335,8 @@ build_and_package() {
         done
     fi
 
-    if [ ! -f "$OUT_DIR/.config" ]; then
-        info "Generating defconfig..."
-        make O=out ARCH=$ARCH CC=clang HOSTCC=clang CROSS_COMPILE=aarch64-linux-gnu- "$DEFCONFIG"
-    else
-        info "Using existing out/.config for incremental build"
-    fi
+    info "Generating defconfig ($DEFCONFIG)..."
+    make O=out ARCH=$ARCH CC=clang HOSTCC=clang CROSS_COMPILE=aarch64-linux-gnu- "$DEFCONFIG"
 
     # Build
     info "Building kernel with $JOBS jobs..."
