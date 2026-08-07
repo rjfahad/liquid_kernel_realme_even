@@ -34,7 +34,7 @@ JOBS="$(nproc)"
 OUT_DIR="$SCRIPT_DIR/out"
 KSU_REPO="https://github.com/tiann/KernelSU.git"
 KSU_NEXT_REPO="https://github.com/KernelSU-Next/KernelSU-Next.git"
-ZIP_PREFIX="Liquid-Even-RUI2"
+ZIP_PREFIX="Arise-Even-RUI2"
 BUILD_VERSION_FILE="$SCRIPT_DIR/.kernel_zip_version"
 BUILD_STATE_FILE="$OUT_DIR/.build_state"
 
@@ -376,7 +376,7 @@ build_and_package() {
 }
 
 package_zip() {
-    local zip_name="${1:-Liquid-Even-RUI2.zip}"
+    local zip_name="${1:-Arise-Even-RUI2.zip}"
 
     header "Packaging $zip_name"
 
@@ -393,7 +393,7 @@ package_zip() {
     # Update anykernel.sh kernel.string
     local root_sol
     root_sol="$(detect_root_solution)"
-    local kernel_str="Liquid Kernel Even (KSUNext) by rjfahad"
+    local kernel_str="Arise Kernel Even (KSUNext) by rjfahad"
 
     sed -i "s/^kernel.string=.*/kernel.string=$kernel_str/" "$ANYKERNEL_DIR/anykernel.sh"
 

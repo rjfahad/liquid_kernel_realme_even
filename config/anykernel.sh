@@ -4,7 +4,7 @@
 ### AnyKernel setup
 # global properties
 properties() { '
-kernel.string=Liquid Kernel Even by rjfahad
+kernel.string=Arise Kernel Even by rjfahad
 do.devicecheck=1
 do.modules=0
 do.systemless=1
